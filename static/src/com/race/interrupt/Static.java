@@ -865,21 +865,42 @@ class analyzeRCFGListener implements ActionListener, ItemListener {
 	    }
 	}
 	
+	private void copySequence(ArrayList<String> a1, ArrayList<String> a2) {
+		a2.clear();
+		for(int i = 0; i < a1.size(); ++i) {
+			a2.add(a1.get(i));
+		}
+	}
+	
+	private void analyzeSRAccess(String id, HashMap<String, ArrayList<String>> srStatus) {
+		Node node = mp.get(id);
+		System.out.println(node.label);
+	}
+	
 	private void DFSAnalyze() {
 		Stack<Node> stk = new Stack<Node>();
 		stk.push(first);
 		while(!stk.isEmpty()) {
 			Node cur = stk.peek();
 			// visit current node
-			System.out.println(cur.name);
+			System.out.println("cur " + cur.name);
+			for(int i = 0; i < cur.sequence.size(); ++i) {
+				System.out.print(cur.sequence.get(i) + ",");
+			}
+			System.out.println();
+			analyzeSRAccess(cur.id, cur.srStatus);
+			System.out.println("----------------");
 			// pop current node
 			cur.isVisiting = false;
 			stk.pop();
 			// push next nodes
 			for(int i = cur.nexts.size() - 1; i >= 0 && cur.nexts.get(i).isVisiting == false; --i) {
 				//System.out.println("push " + cur.nexts.get(i).name + " " + cur.nexts.size());
-				cur.nexts.get(i).isVisiting = true;
-				stk.push(cur.nexts.get(i));
+				Node n = cur.nexts.get(i);
+				copySequence(cur.sequence, n.sequence);
+				n.sequence.add(n.name);
+				n.isVisiting = true;
+				stk.push(n);
 			}
 		}
 	}
@@ -909,7 +930,6 @@ class analyzeRCFGListener implements ActionListener, ItemListener {
 	private void openFileToAnalyze() throws IOException {
 		rd = new BufferedReader(new FileReader(new File("IntProcess.dot")));
 		String s;
-		//boolean first = true;
 		while(rd.ready()) {
 			s = rd.readLine();
 			if(s.matches(".*\\[.*")) {
@@ -919,14 +939,11 @@ class analyzeRCFGListener implements ActionListener, ItemListener {
 				//System.out.println(s);
 				String id = s.substring(0, s.indexOf("["));
 				String name = s.substring(s.indexOf("{") + 1, s.indexOf("\\"));
-				String[] arr = s.split("_");
-				String label = "";
-				for(int i = 1; i < arr.length - 1; ++i) {
-					label = label + " " + arr[i];
-				}
+				//String[] arr = s.split("_");
+				String label = s.substring(s.indexOf("_") + 1, s.lastIndexOf("_"));
+				//System.out.println(label);
 				Node n = new Node(id, name, label);	
 				// put node
-				//mp.put(n.id, n);
 				if(mp.containsKey(id)) {
 					Node tmp = mp.get(id);
 					tmp.id = id;
@@ -936,52 +953,38 @@ class analyzeRCFGListener implements ActionListener, ItemListener {
 				else {
 					mp.put(id, n);
 				}
-				// mark entry
+				// initial the first node
 				if(n.name.matches(".*main\\.entry.*")) {
-					//System.out.println(s);
+					// initial
+					ArrayList<String> tmp = new ArrayList<String>();
+					tmp.add("tmpAddr");
+					n.srStatus.put("tmpAddr", tmp);
+					tmp = new ArrayList<String>();
+					tmp.add("mInput");
+					n.srStatus.put("mInput", tmp);
+					n.sequence.add(n.name);
+					// mark
 					first = n;
 				}
-				
-				if(id.equals("Node0xa65cda4")) {
-					System.out.println("!!!~~~!!!!" + mp.get(id));
-				}
-				
 			}
 			else if(s.matches(".*->.*")) {
 				// precious node
 				s = s.replaceAll(" ", "");
 				s = s.replaceAll("\t", "");
 				s = s.replaceAll(";", "");
-				System.out.println(s);
 				String[] arr = s.split("->");
 				Node pre = mp.get(arr[0]);
-				if(!mp.containsKey(arr[0])) {
-					System.out.println("========================");
-				}
+				// if the precious node has back-edge, then ignore it.
 				if(pre.name.matches(".*for\\.inc.*") || pre.name.matches(".*while\\.body.*")) {
-					System.out.println("======================");
 					continue;
 				}
 				// next node
 				if(!mp.containsKey(arr[1])) {
-					System.out.println("=no=");
 					Node nxt = new Node();
 					mp.put(arr[1], nxt);
-					/*Node r = new Node();
-					r.id = arr[1];
-					mp.put(r.id, r);*/
-				}
-				else {
-					System.out.println("=yes=");
 				}
 				// add next node
-				System.out.println("=find=" + mp.get(arr[1]));
 				pre.nexts.add(mp.get(arr[1]));
-				
-				if(arr[1].equals("Node0xa65cda4")) {
-					System.out.println("!!!!!!!!!!!!" + mp.get(arr[1]));
-				}
-				//n.nexts.add(arr[1]);
 			}
 		}
 	}	
@@ -994,6 +997,8 @@ class Node {
 	public String label;
 	public ArrayList<Node> nexts; // next nodes
 	public boolean isVisiting;
+	public ArrayList<String> sequence; // sequence: precious name + label
+	public HashMap<String, ArrayList<String>> srStatus;
 	
 	public Node() {
 		id = "";
@@ -1001,6 +1006,8 @@ class Node {
 		label = "";
 		nexts = new ArrayList<Node>();
 		isVisiting = false;
+		sequence = new ArrayList<>();
+		srStatus = new HashMap<String, ArrayList<String>>();
 	}
 	
 	public Node(String id, String name, String label) {
@@ -1009,6 +1016,8 @@ class Node {
 		this.label = label;
 		nexts = new ArrayList<Node>();
 		isVisiting = false;
+		sequence = new ArrayList<>();
+		srStatus = new HashMap<String, ArrayList<String>>();
 	}
 }
 

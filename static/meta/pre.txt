@@ -1,0 +1,10 @@
+###global variables###
+tmpAddr pointer
+###function variables###
+ReadASIC BasedAddr
+ReadASIC rdbuf
+ReadASIC rdlen
+ReadASIC FlgComm
+WriteASIC BasedAddr
+WriteASIC wrbuf
+WriteASIC wrlen
