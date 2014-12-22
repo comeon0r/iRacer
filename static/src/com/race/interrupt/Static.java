@@ -21,10 +21,14 @@ import java.awt.image.BufferedImage;
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.InputStreamReader;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -32,6 +36,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Queue;
 import java.util.Stack;
 import java.util.Vector;
@@ -98,6 +103,14 @@ public class Static extends javax.swing.JFrame {
 	static public File settingFolder = new File("setting");
 	static public File metaFolder = new File("meta");
 
+	
+	// SR
+	static public ArrayList<SRElement> SRs = new ArrayList<SRElement>();
+	// function number
+	static public HashMap<String, Integer> FunctionNumber = new HashMap<String, Integer>();
+	// function variables
+	static public HashMap<String, FVPair> FVs = new HashMap<String, FVPair>();
+	
 	public Static() {
 		initComponents();
 		addListeners();
@@ -829,6 +842,10 @@ class analyzeRCFGListener implements ActionListener, ItemListener {
 
 	public HashMap<String, Node> mp = new HashMap<String, Node>();
 	public Node first = new Node();
+	
+
+	// file content
+	static public HashMap<Integer, String> IntProcessFileContent = new HashMap<Integer, String>();
 
 	@Override
 	public void itemStateChanged(ItemEvent e) {
@@ -840,6 +857,36 @@ class analyzeRCFGListener implements ActionListener, ItemListener {
 	public void actionPerformed(ActionEvent e) {
 		// TODO Auto-generated method stub
 		try {
+			// initial code file content
+			/*Static.SRs.add("tmpAddr");
+			Static.SRs.add("mInput");*/
+			
+			
+			SRElement sr = new SRElement();
+			sr.realName = "tmpAddr";
+			sr.fakeName = "tmpAddr";
+			Static.SRs.add(sr);
+			sr = new SRElement();
+			sr.realName = "mInput";
+			sr.fakeName = "mInput";
+			Static.SRs.add(sr);
+			
+			Static.FunctionNumber.put("ReadASIC", 31);
+			Static.FunctionNumber.put("WriteASIC", 71);
+			Static.FunctionNumber.put("main", 99);
+			
+			//FVElement fv = new FVElement();
+			/*FVPair p = new FVPair();
+			p.idx = 1;
+			p.var = "BasedAddr";
+			fv.fName = "ReadASIC";
+			fv.varPair = p;
+			
+			*/
+			
+			initialFileContent();
+			
+			
 			openFileToAnalyze();
 			//System.out.println("===" + mp.get("Node0xa65ccd4").isVisited);
 			//printMap(mp);
@@ -851,6 +898,17 @@ class analyzeRCFGListener implements ActionListener, ItemListener {
 		} catch (IOException e1) {
 			// TODO Auto-generated catch block
 			e1.printStackTrace();
+		}
+	}
+	
+	public void initialFileContent() throws IOException {
+		BufferedReader in = new BufferedReader(new FileReader(new File("IntProcess.c")));
+		String s;
+		int cnt = 0;
+		while(in.ready()) {
+			s = in.readLine();
+			++cnt;
+			IntProcessFileContent.put(cnt, s);
 		}
 	}
 	
@@ -872,10 +930,254 @@ class analyzeRCFGListener implements ActionListener, ItemListener {
 		}
 	}
 	
-	private void analyzeSRAccess(String id, HashMap<String, ArrayList<String>> srStatus) {
-		Node node = mp.get(id);
-		System.out.println(node.label);
+	private ArrayList<SRElement> copySRs(ArrayList<SRElement> SRs) {
+		ArrayList<SRElement> curSRs = new ArrayList<SRElement>();
+		for(int i = 0; i < SRs.size(); ++i) {
+			SRElement sr = new SRElement();
+			sr.inFunction = SRs.get(i).inFunction;
+			sr.realName = SRs.get(i).realName;
+			sr.fakeName = SRs.get(i).fakeName;
+			// add it
+			curSRs.add(sr);
+		}
+		return curSRs;
 	}
+	
+	/**
+	 * This method makes a "deep clone" of any Java object it is given.
+	 *//*
+	 public static Object deepClone(Object object) {
+	   try {
+	     ByteArrayOutputStream baos = new ByteArrayOutputStream();
+	     ObjectOutputStream oos = new ObjectOutputStream(baos);
+	     oos.writeObject(object);
+	     ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+	     ObjectInputStream ois = new ObjectInputStream(bais);
+	     return ois.readObject();
+	   }
+	   catch (Exception e) {
+	     e.printStackTrace();
+	     return null;
+	   }
+	 }*/
+	
+	private ArrayList<SRElement> updateSRsInBlock(String id, ArrayList<SRElement> curSRs) {
+		Node block = mp.get(id);
+		String name = block.name;
+		String function = name.substring(0, name.indexOf("."));
+		String label = block.label;
+		System.out.println("label " + label);
+		String[] arr = label.split("_");
+		for(int i = 0; i < arr.length; ++i) {
+			String code = IntProcessFileContent.get(Integer.parseInt(arr[i]));
+			if(code.matches(".*\\s=\\s.*")) {
+				System.out.println("code " + code);
+				/*for(int j = 0; j < curSRs.size(); ++j) {
+					String fakeName = curSRs.get(j).fakeName;
+					System.out.print(fakeName + ",");
+				}
+				System.out.println();*/
+				for(int j = 0; j < curSRs.size(); ++j) {
+					String fakeName = curSRs.get(j).fakeName;
+					if(code.matches(".*=.*" + fakeName + ".*")) {
+						System.out.println("referrence " + fakeName);
+						code = code.substring(0, code.indexOf(" = "));
+						code = code.replaceAll("\\t", "");
+						if(code.matches(".*\\s.*")) {
+							code = code.substring(code.indexOf(" "), code.length());
+						}
+						if(code.matches(".*\\[.*")) {
+							code = code.substring(0, code.indexOf("["));
+						}
+						System.out.println(code);
+						
+						SRElement sr = new SRElement();
+						sr.inFunction = function;
+						sr.realName = curSRs.get(j).realName;
+						sr.fakeName = code;
+						// add it to curSRs
+						curSRs.add(sr);
+					}
+				}
+			}
+		}
+		return curSRs;
+	}
+	
+	private void analyzeSRAccess(String id, HashMap<String, ArrayList<String>> srStatus) {
+		// current SRs
+		ArrayList<SRElement> curSRs = copySRs(Static.SRs);
+		// ArrayList<SRElement> curSRs = (ArrayList<SRElement>) deepClone(Static.SRs);
+		System.out.println("============!!!!!!!!!!!!!!!!!!==============" + curSRs.size());
+		
+		ArrayList<String> sq = mp.get(id).sequence;
+		for(int i = 1; i < sq.size(); ++i) {
+			
+			// update SRs in Block
+			curSRs = updateSRsInBlock(sq.get(i - 1), curSRs);
+			
+			String name1 = mp.get(sq.get(i - 1)).name;
+			String name2 = mp.get(sq.get(i)).name;
+			String f1 = name1.substring(0, name1.indexOf("."));
+			String f2 = name2.substring(0, name2.indexOf("."));
+			//System.out.println(f1 + " " + f2);
+			if(!f1.equals(f2)) {
+				String caller = "", callee = "";
+				// caller
+				String label1 = mp.get(sq.get(i - 1)).label;
+				String[] arr = label1.split("_");
+				for(int j = 0; j < arr.length; ++j) {
+					String code = IntProcessFileContent.get(Integer.parseInt(arr[j]));
+					if(code.matches(".*" + f2 + ".*")) {
+						//System.out.println("===" + code.substring(code.indexOf("(") + 1, code.lastIndexOf(")")));
+						caller = code.substring(code.indexOf("(") + 1, code.lastIndexOf(")"));
+						break;
+					}
+				}
+				// callee
+				String label2 = mp.get(sq.get(i)).label;
+				arr = label2.split("_");
+				String code = IntProcessFileContent.get(Integer.parseInt(arr[0]));
+				//System.out.println("-->" + code.substring(code.indexOf("(") + 1, code.lastIndexOf(")")));
+				callee = code.substring(code.indexOf("(") + 1, code.lastIndexOf(")"));
+				
+				System.out.println("===" + caller);
+				System.out.println("-->" + callee);
+				
+				caller = caller.trim().replaceAll(" ", "");
+				String[] callerVars = caller.split(",");
+				String[] calleeVars = callee.split(",");
+				for(int j = 0; j < callerVars.length; ++j) {
+					//System.out.println(callerVars[j] + " " + calleeVars[j]);
+					//System.out.println("in " + inSR(callerVars[j]));
+					//System.out.println("match " + calleeVars[j].matches(".*[\\*\\&].*"));
+					SRElement sr = inSR(callerVars[j], curSRs);
+					if(sr != null && calleeVars[j].matches(".*[\\*\\&].*")) {
+						//System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1");
+						//System.out.println(calleeVars[j]);
+						String fakeName = calleeVars[j].substring(calleeVars[j].lastIndexOf(" ") + 1, calleeVars[j].length());
+						fakeName = fakeName.replaceAll("\\*", "");
+						System.out.println(sr.realName + " " + j + " yes " + fakeName);
+						SRElement newSR = new SRElement();
+						newSR.inFunction = f2;
+						newSR.realName = sr.realName;
+						newSR.fakeName = fakeName;
+						curSRs.add(newSR);
+						//System.out.println(fakeName);
+					}
+				}
+				
+				// at the same time of function call, if the precious function is ending, delete its SRs!
+				if(name1.matches(".*end.*")) {
+					deleteSRs(f1, curSRs);
+				}
+			}
+		}
+		// after updating SRs, then check the last block's SR access.
+		Node lastNode = mp.get(sq.get(sq.size() - 1));
+		String label = lastNode.label;
+		System.out.println("label " + label);
+		String[] arr = label.split("_");
+		
+		// if it is a condition, then may be READ access
+		if(lastNode.name.matches(".*cond.*")) {
+			//System.out.println("=====================================" + lastNode.label);
+			for(int i = 0; i < arr.length; ++i) {
+				String code = IntProcessFileContent.get(Integer.parseInt(arr[i]));
+				for(int j = 0; j < curSRs.size(); ++j) {
+					String fakeName = curSRs.get(j).fakeName;
+					if(code.matches(".*" + fakeName + ".*")) {
+						System.out.println("===COND READ===" + curSRs.get(j).realName);
+					}
+				}
+			}
+		}
+		// if it is a operation.
+		for(int i = 0; i < arr.length; ++i) {
+			String code = IntProcessFileContent.get(Integer.parseInt(arr[i]));
+			System.out.println("================code======================" + code);
+			for(int j = 0; j < curSRs.size(); ++j) {
+				String fakeName = curSRs.get(j).fakeName;
+				System.out.println("=================fakename==================" + fakeName);
+				// if is ++ or -- operations, then it can be READ and WRITE access
+				if(code.matches(".*\\+\\+" + fakeName + ".*") 
+						|| code.matches(".*" + fakeName + "\\+\\+.*")
+						|| code.matches(".*--" + fakeName + ".*")
+						|| code.matches(".*" + fakeName + "--.*")) {
+					System.out.println("===READ===" + curSRs.get(j).realName);
+					System.out.println("===WRITE===" + curSRs.get(j).realName);
+				}
+				if(code.matches(".*=.*" + fakeName + ".*")) {
+					System.out.println("===READ===" + curSRs.get(j).realName);
+				}
+				if(code.matches(".*" + fakeName + ".*=.*")) {
+					System.out.println("===WRITE===" + curSRs.get(j).realName);
+				}
+			}
+		}
+		
+		
+		
+		/*for(int i = 1; i < sq.size(); ++i) {
+			String preBlock = sq.get(i - 1), afterBlock = sq.get(i);
+			String preFName = preBlock.substring(0, preBlock.indexOf("."));
+			String afterFName = afterBlock.substring(0, afterBlock.indexOf("."));
+			// it means a function call
+			if(!preFName.equals(afterFName)) {
+				
+				
+				
+				System.out.println(preFName + " " + afterFName);
+				String preVarStr = IntProcessFileContent.get(Static.FunctionNumber.get(preFName));
+				String afterVarStr = IntProcessFileContent.get(Static.FunctionNumber.get(afterFName));
+				System.out.println(preVarStr + "~~~" + afterVarStr);
+				
+			}
+		}*/
+		/*Node node = mp.get(id);
+		System.out.println(node.label);
+		String[] arr = node.label.split("_");
+		for(int i = 0; i < arr.length; ++i) {
+			int lineNumber = Integer.parseInt(arr[i]);
+			String code = IntProcessFileContent.get(lineNumber);
+			// check each global variables
+			ArrayList<String> v = Static.SRs;
+			for(int j = 0; j < v.size(); ++j) {
+				ArrayList<String> vars = node.srStatus.get(v.get(j));
+				for(int t = 0; t < vars.size(); ++t) {
+					if(code.matches(".*" + vars.get(t) + ".*")) {
+						System.out.println("==========================");
+					}
+				}
+			}
+		}*/
+	}
+	
+	public void deleteSRs(String function, ArrayList<SRElement> curSRs) {
+		for(int i = 0; i < curSRs.size(); ) {
+			if(curSRs.get(i).inFunction.equals(function)) {
+				curSRs.remove(i);
+			}
+			else {
+				++i;
+			}
+		}
+	}
+	
+
+	public SRElement inSR(String str, ArrayList<SRElement> curSRs) {
+		//System.out.println("------------------");
+		//System.out.println(str);
+		for(int i = 0; i < curSRs.size(); ++i) {
+			//System.out.println(Static.SRs.get(i));
+			if(str.matches(".*" + curSRs.get(i).fakeName + ".*")) {
+				return curSRs.get(i);
+			}
+		}
+		//System.out.println("-------------------");
+		return null;
+	}
+	
 	
 	private void DFSAnalyze() {
 		Stack<Node> stk = new Stack<Node>();
@@ -883,13 +1185,14 @@ class analyzeRCFGListener implements ActionListener, ItemListener {
 		while(!stk.isEmpty()) {
 			Node cur = stk.peek();
 			// visit current node
-			System.out.println("cur " + cur.name);
+			//System.out.println("cur " + cur.name);
+			System.out.println("==========sequence=================");
 			for(int i = 0; i < cur.sequence.size(); ++i) {
 				System.out.print(cur.sequence.get(i) + ",");
 			}
 			System.out.println();
 			analyzeSRAccess(cur.id, cur.srStatus);
-			System.out.println("----------------");
+			//System.out.println("----------------");
 			// pop current node
 			cur.isVisiting = false;
 			stk.pop();
@@ -898,7 +1201,7 @@ class analyzeRCFGListener implements ActionListener, ItemListener {
 				//System.out.println("push " + cur.nexts.get(i).name + " " + cur.nexts.size());
 				Node n = cur.nexts.get(i);
 				copySequence(cur.sequence, n.sequence);
-				n.sequence.add(n.name);
+				n.sequence.add(n.id);
 				n.isVisiting = true;
 				stk.push(n);
 			}
@@ -962,7 +1265,8 @@ class analyzeRCFGListener implements ActionListener, ItemListener {
 					tmp = new ArrayList<String>();
 					tmp.add("mInput");
 					n.srStatus.put("mInput", tmp);
-					n.sequence.add(n.name);
+					//n.sequence.add(n.name);
+					n.sequence.add(n.id);
 					// mark
 					first = n;
 				}
@@ -989,6 +1293,38 @@ class analyzeRCFGListener implements ActionListener, ItemListener {
 		}
 	}	
 }
+/*
+class FVElement {
+	public String fName;
+	public ArrayList<VARPair>  varPair;
+	
+	public FVElement() {
+		fName = "";
+		varPair = new ArrayList<VARPair>();
+	}
+}
+*/
+class FVPair {
+	int idx;
+	String var;
+	
+	public FVPair() {
+		idx = 0;
+		var = "";
+	}
+}
+
+class SRElement {
+	public String inFunction;
+	public String realName;
+	public String fakeName;
+	
+	public SRElement() {
+		inFunction = "";
+		realName = "";
+		fakeName = "";
+	}
+}
 
 
 class Node {
@@ -1006,7 +1342,7 @@ class Node {
 		label = "";
 		nexts = new ArrayList<Node>();
 		isVisiting = false;
-		sequence = new ArrayList<>();
+		sequence = new ArrayList<String>();
 		srStatus = new HashMap<String, ArrayList<String>>();
 	}
 	
@@ -1016,7 +1352,7 @@ class Node {
 		this.label = label;
 		nexts = new ArrayList<Node>();
 		isVisiting = false;
-		sequence = new ArrayList<>();
+		sequence = new ArrayList<String>();
 		srStatus = new HashMap<String, ArrayList<String>>();
 	}
 }
